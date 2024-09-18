@@ -6,13 +6,133 @@ const int signalPin = A0;
 
 LiquidCrystal lcd(4, 5, 6, 7, 8, 9);
 
+unsigned long tiempoInicio = 0;
+unsigned long tiempoMaximoCaptura = 13000; // 10 segundos en milisegundos
+
+
+bool capturaActiva = false;
+
+
+const int filas = 220;
+int** matriz;
+int indice = 0;
+
+
+int picos = 0;
+int valles = 0;
+int transicionesBruscas = 0;
+float pendienteAnterior = 0.0;
+float umbralPendiente = 0.1;
+float amplitud = 0;
+float frecuencia = 0;
+float fase = 0;
+
+
+void iniciarCaptura();
+void capturarDatos();
+void finalizarCaptura();
+
+void liberacion();
+void tiposenal(int &tipoSenal1);
+void analisis_senal(int tipoSenal, float &amplitud, float &frecuencia, float &fase);
+
 void setup() {
     pinMode(startPin, INPUT);
     pinMode(stopPin, INPUT);
     lcd.begin(16, 2);
     Serial.begin(9600);
+
+    lcd.setCursor(0, 0);
+    lcd.print("Inicio programa");
+
+    
+    matriz = new int*[filas];
+    for (int i = 0; i < filas; i++) {
+        matriz[i] = new int[2];  
+    }
 }
 
 void loop() {
+    
+    if (digitalRead(startPin) == HIGH && !capturaActiva) {
+        iniciarCaptura();
+    }
 
-{
+    
+    if (capturaActiva) {
+        if (millis() - tiempoInicio < tiempoMaximoCaptura) {
+            capturarDatos();
+        } else {
+            finalizarCaptura();
+        }
+        if (digitalRead(stopPin) == HIGH) {
+            finalizarCaptura();
+        }
+    }
+}
+void capturarDatos() {
+    if (indice < filas) {
+        
+        matriz[indice][0] = millis() - tiempoInicio; 
+        matriz[indice][1] = analogRead(signalPin);   
+        Serial.print("Tiempo: ");
+        Serial.print(matriz[indice][0]);
+        Serial.print(" ms, Valor: ");
+        Serial.println(matriz[indice][1]);
+        indice++;
+
+        delay(100); // Muestreo cada 100 ms
+    }
+}
+void tiposenal(int &tipoSenal1) {
+    picos = 0;
+    valles = 0;
+    transicionesBruscas = 0;
+
+    for (int i = 1; i < indice - 1; i++) {
+        float pendienteActual = (matriz[i + 1][1] - matriz[i][1]) / (matriz[i + 1][0] - matriz[i][0]);
+
+        if (matriz[i - 1][1] < matriz[i][1] && matriz[i][1] > matriz[i + 1][1]) {
+            picos++;
+        }
+
+        else if (matriz[i - 1][1] > matriz[i][1] && matriz[i][1] < matriz[i + 1][1]) {
+            valles++;
+        }
+
+        if (abs(pendienteActual) > 10.0) { 
+            transicionesBruscas++;
+        }
+
+        
+        if (abs(pendienteActual - pendienteAnterior) > umbralPendiente) {
+            pendienteAnterior = pendienteActual;
+        }
+    }
+
+    
+    int totalPicosValles = picos + valles;
+
+
+    float porcentajeSenoidal = (float)totalPicosValles ;  
+    float porcentajeCuadrada = (float)transicionesBruscas ; 
+    float porcentajeTriangular = (float)picos; 
+
+   
+    if (porcentajeSenoidal >= 7.0) {
+        tipoSenal1=1;
+    } else if (porcentajeTriangular >= 7.0) {
+        tipoSenal1=2;
+    } else if (porcentajeCuadrada >= 7.0) {
+        tipoSenal1=3;
+    } else {
+        tipoSenal1=4;
+    }
+}
+void liberacion(){
+    
+    for (int i = 0; i < filas; i++) {
+        delete[] matriz[i];
+    }
+    delete[] matriz;
+}
