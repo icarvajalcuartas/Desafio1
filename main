@@ -7,7 +7,7 @@ const int signalPin = A0;
 LiquidCrystal lcd(4, 5, 6, 7, 8, 9);
 
 unsigned long tiempoInicio = 0;
-unsigned long tiempoMaximoCaptura = 13000; 
+unsigned long tiempoMaximoCaptura = 13000; // 10 segundos en milisegundos
 
 
 bool capturaActiva = false;
@@ -25,7 +25,7 @@ float pendienteAnterior = 0.0;
 float umbralPendiente = 0.1;
 float amplitud = 0;
 float frecuencia = 0;
-float fase = 0;
+
 
 
 void iniciarCaptura();
@@ -48,7 +48,7 @@ void setup() {
     
     matriz = new int*[filas];
     for (int i = 0; i < filas; i++) {
-        matriz[i] = new int[2];  
+        matriz[i] = new int[2];
     }
 }
 
@@ -70,20 +70,107 @@ void loop() {
         }
     }
 }
+
+
+void iniciarCaptura() {
+    capturaActiva = true;
+    tiempoInicio = millis();
+    indice = 0;
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Inicio de captura de datos");
+    Serial.println("Inicio captura");
+}
+
+
 void capturarDatos() {
     if (indice < filas) {
         
-        matriz[indice][0] = millis() - tiempoInicio; 
-        matriz[indice][1] = analogRead(signalPin);   
+        matriz[indice][0] = millis() - tiempoInicio;
+        matriz[indice][1] = analogRead(signalPin);
         Serial.print("Tiempo: ");
         Serial.print(matriz[indice][0]);
         Serial.print(" ms, Valor: ");
         Serial.println(matriz[indice][1]);
         indice++;
         
-        delay(100); 
+        delay(100); // Muestreo cada 100 ms
     }
 }
+
+
+void finalizarCaptura() {
+    capturaActiva = false;
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Captura finalizada");
+    Serial.println("Finalizando captura de datos...");
+    
+    
+    int tipoSenal1 =0;
+    tiposenal(tipoSenal1);
+    
+    if (tipoSenal1 == 4) {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Senal desconocida");
+        Serial.println("Senal desconocida.");
+    } else {
+        analisis_senal(tipoSenal1, amplitud, frecuencia);
+        if (tipoSenal1==1){
+            Serial.print("Tipo de senal: ");
+            Serial.println("senoidal");
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Senal: ");
+            lcd.print("senoidal");
+            delay(2000);
+        }
+        else if (tipoSenal1==2){
+            Serial.print("Tipo de senal: ");
+            Serial.println("triangular");
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Senal: ");
+            lcd.print("triangular");
+            delay(2000);
+        }
+        else if (tipoSenal1==3){
+            Serial.print("Tipo de senal: ");
+            Serial.println("cuadrada");
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Senal: ");
+            lcd.print("cuadrada");
+            delay(2000);
+        }
+        Serial.print("Frecuencia: ");
+        Serial.print(frecuencia);
+        Serial.println(" Hz");
+        Serial.print("Amplitud: ");
+        Serial.print(amplitud);
+        Serial.println(" V");
+        
+        
+        lcd.setCursor(0, 1);
+        String info = "F: " + String(frecuencia) + " Hz A: " + String(amplitud) + " V ";
+        lcd.print(info);
+        for (int i = 0; i < info.length(); i++) {
+            lcd.scrollDisplayLeft();
+            delay(300);
+        }
+    }
+    liberacion();
+}
+
+void liberacion(){
+    
+    for (int i = 0; i < filas; i++) {
+        delete[] matriz[i];
+    }
+    delete[] matriz;
+}
+
 void tiposenal(int &tipoSenal1) {
     picos = 0;
     valles = 0;
@@ -100,7 +187,7 @@ void tiposenal(int &tipoSenal1) {
             valles++;
         }
         
-        if (abs(pendienteActual) > 10.0) { 
+        if (abs(pendienteActual) > 10.0) {
             transicionesBruscas++;
         }
         
@@ -114,10 +201,10 @@ void tiposenal(int &tipoSenal1) {
     int totalPicosValles = picos + valles;
     
     
-    float porcentajeSenoidal = (float)totalPicosValles ;  
-    float porcentajeCuadrada = (float)transicionesBruscas ; 
-    float porcentajeTriangular = (float)picos; 
-
+    float porcentajeSenoidal = (float)totalPicosValles ;
+    float porcentajeCuadrada = (float)transicionesBruscas ;
+    float porcentajeTriangular = (float)picos;
+    
     
     if (porcentajeSenoidal >= 7.0) {
         tipoSenal1=1;
@@ -129,10 +216,44 @@ void tiposenal(int &tipoSenal1) {
         tipoSenal1=4;
     }
 }
-void liberacion(){
+
+
+
+void analisis_senal(int tipoSenal, float &amplitud, float &frecuencia) {
+    int valorMax = matriz[0][1];
+    int valorMin = matriz[0][1];
+    unsigned long tiempoMax = 0;
+    unsigned long tiempoAnteriorPico = 0;
+    bool primerPico = true;
     
-    for (int i = 0; i < filas; i++) {
-        delete[] matriz[i];
+    
+    for (int i = 0; i < indice; i++) {
+        if (matriz[i][1] > valorMax) {
+            valorMax = matriz[i][1];
+            tiempoMax = matriz[i][0];
+        }
+        if (matriz[i][1] < valorMin) {
+            valorMin = matriz[i][1];
+        }
+        
+        if (tipoSenal == 1 || tipoSenal == 2) {
+            if (i > 0 && matriz[i - 1][1] < matriz[i][1] && matriz[i][1] > matriz[i + 1][1]) {
+                if (primerPico) {
+                    tiempoAnteriorPico = matriz[i][0];
+                    primerPico = false;
+                } else {
+                    frecuencia = 1000.0 / (matriz[i][0] - tiempoAnteriorPico);
+                    tiempoAnteriorPico = matriz[i][0];
+                }
+            }
+        }
     }
-    delete[] matriz;
+    
+    
+    if (tipoSenal == 1 || tipoSenal == 2) {
+        amplitud = (valorMax - valorMin) / 204.6;
+    } else if (tipoSenal == 3) {
+        amplitud = (valorMax - valorMin)/204.6;
+    }
+    
 }
