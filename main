@@ -25,7 +25,7 @@ float pendienteAnterior = 0.0;
 float umbralPendiente = 0.1;
 float amplitud = 0;
 float frecuencia = 0;
-float fase = 0;
+
 
 
 void iniciarCaptura();
@@ -34,7 +34,7 @@ void finalizarCaptura();
 
 void liberacion();
 void tiposenal(int &tipoSenal1);
-void analisis_senal(int tipoSenal, float &amplitud, float &frecuencia, float &fase);
+void analisis_senal(int tipoSenal, float &amplitud, float &frecuencia);
 
 void setup() {
     pinMode(startPin, INPUT);
@@ -130,7 +130,7 @@ void finalizarCaptura() {
         Serial.print("Amplitud: ");
         Serial.print(amplitud);
         Serial.println(" V");
-
+        
         
         lcd.setCursor(0, 1);
         String info = "F: " + String(frecuencia) + " Hz A: " + String(amplitud) + " V " ;
@@ -179,5 +179,5 @@ void analisis_senal(int tipoSenal, float &amplitud, float &frecuencia) {
         amplitud = (valorMax - valorMin)/204.6;
     }
     
-
+    
 }
